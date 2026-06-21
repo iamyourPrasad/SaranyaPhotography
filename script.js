@@ -33,24 +33,35 @@ document.querySelectorAll('.mobile-nav a').forEach(link => {
 const yearEl = document.getElementById('year');
 if (yearEl) yearEl.textContent = new Date().getFullYear();
 
-// ===== Booking form (front-end only — wire up to backend/email service later) =====
+// ===== Booking form (FormSubmit — see https://formsubmit.co) =====
+// Submissions POST to the form's `action` URL (set in index.html).
+// On the very first submission to a new email address, FormSubmit sends
+// a one-time confirmation link to that inbox — it must be clicked once
+// before mail starts delivering for real.
 const bookingForm = document.getElementById('bookingForm');
 const formNote = document.getElementById('formNote');
 
 if (bookingForm) {
   bookingForm.addEventListener('submit', (e) => {
-    e.preventDefault();
     const name = bookingForm.name.value.trim();
     const phone = bookingForm.phone.value.trim();
 
     if (!name || !phone) {
+      e.preventDefault();
       formNote.textContent = 'Please fill in your name and phone number.';
       return;
     }
 
-    formNote.textContent = `Thanks, ${name}! We've received your enquiry and will reach out shortly.`;
-    bookingForm.reset();
+    formNote.textContent = 'Sending your enquiry...';
+    // No preventDefault here — the form submits to FormSubmit for real.
   });
+}
+
+// Show a success note if we've just come back from a FormSubmit redirect
+if (window.location.search.includes('sent=1') || window.location.hash.includes('sent=1')) {
+  if (formNote) {
+    formNote.textContent = "Thanks! We've received your enquiry and will reach out shortly.";
+  }
 }
 
 // ===== Image Sliders =====
