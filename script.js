@@ -199,19 +199,86 @@ async function loadClientData(folder) {
   }
 }
 
-async function initTestimonials() {
-  const grid = document.getElementById('testimonialsGrid');
-  if (!grid) return;
+// Builds one testimonial <figure> card from a client's data.json.
+async function buildTestimonialCard(baseFolder, client, staggerIndex) {
+  const folder = `${baseFolder}/${client}`;
+  const data = await loadClientData(folder);
 
-  const baseFolder = grid.dataset.folder;
+  const card = document.createElement('figure');
+  card.className = 'testimonial-card';
+
+  if (!data) {
+    card.innerHTML = `<blockquote class="testimonial-empty">Add ${folder}/data.json with quote, name, event and photos to fill this card.</blockquote>`;
+    return card;
+  }
+
+  const quote = data.quote || '';
+  const name = data.name || 'Client Name';
+  const event = data.event || '';
+  const photos = Array.isArray(data.photos) ? data.photos.filter(Boolean) : [];
+
+  card.innerHTML = `
+    <blockquote></blockquote>
+    <figcaption>
+      <span class="t-avatar"></span>
+      <span>
+        <span class="t-name"></span>
+        <span class="t-event"></span>
+      </span>
+    </figcaption>
+  `;
+  // Set all text via textContent (not innerHTML interpolation) so any
+  // characters typed in data.json can't break or inject into markup.
+  card.querySelector('blockquote').textContent = `"${quote}"`;
+  card.querySelector('.t-name').textContent = name;
+  card.querySelector('.t-event').textContent = event;
+
+  const avatar = card.querySelector('.t-avatar');
+  if (!photos.length) {
+    avatar.classList.add('tile-slider-empty');
+    avatar.innerHTML = `<span class="placeholder-label">Add photo</span>`;
+  } else {
+    const imgs = photos.map((f) => {
+      const img = document.createElement('img');
+      img.src = `${folder}/${f}`;
+      img.alt = '';
+      img.draggable = false;
+      return img;
+    });
+    imgs.forEach((img) => avatar.appendChild(img));
+    let current = 0;
+    imgs[current].classList.add('active');
+    if (photos.length > 1) {
+      setInterval(() => {
+        imgs[current].classList.remove('active');
+        current = (current + 1) % photos.length;
+        imgs[current].classList.add('active');
+      }, AUTO_ADVANCE_MS + staggerIndex * 350);
+    }
+  }
+
+  return card;
+}
+
+// ---- Testimonials carousel: pages of 3 cards, swipe + arrows + dots ----
+// Client list lives in assets/Testimonials/clients-index.json, e.g.:
+//   ["client-1", "client-2", "client-3", "client-4"]
+// Create a new assets/Testimonials/client-N/ folder with its own data.json,
+// then add "client-N" to that list — it's picked up automatically and
+// grouped into pages of 3 (1 per page on narrow screens).
+async function initTestimonials() {
+  const carousel = document.getElementById('testimonialsCarousel');
+  if (!carousel) return;
+
+  const baseFolder = carousel.dataset.folder;
   if (!baseFolder) return;
 
-  // The list of client folders lives in one small index file at
-  // assets/Testimonials/clients-index.json, e.g.:
-  //   ["client-1", "client-2", "client-3", "client-4"]
-  // Create a new assets/Testimonials/client-N/ folder with its own
-  // data.json, then add "client-N" to that list — the card appears
-  // automatically, no other editing needed.
+  const viewport = carousel.querySelector('.testimonial-viewport');
+  const track = carousel.querySelector('.testimonial-track');
+  const dotsWrap = carousel.querySelector('.slider-dots');
+  const prevBtn = carousel.querySelector('.slider-arrow.prev');
+  const nextBtn = carousel.querySelector('.slider-arrow.next');
+
   let clients = [];
   try {
     const res = await fetch(`${baseFolder}/clients-index.json`, { cache: 'no-store' });
@@ -224,75 +291,115 @@ async function initTestimonials() {
   }
 
   if (!clients.length) {
-    grid.innerHTML = `<p class="testimonial-empty">Add client folders and list them in <code>${baseFolder}/clients-index.json</code> to show testimonials here.</p>`;
+    track.innerHTML = `<p class="testimonial-empty">Add client folders and list them in <code>${baseFolder}/clients-index.json</code> to show testimonials here.</p>`;
+    prevBtn.style.display = 'none';
+    nextBtn.style.display = 'none';
     return;
   }
 
   const cards = await Promise.all(
-    clients.map(async (client, i) => {
-      const folder = `${baseFolder}/${client}`;
-      const data = await loadClientData(folder);
-
-      const card = document.createElement('figure');
-      card.className = 'testimonial-card';
-
-      if (!data) {
-        card.innerHTML = `<blockquote class="testimonial-empty">Add ${folder}/data.json with quote, name, event and photos to fill this card.</blockquote>`;
-        return card;
-      }
-
-      const quote = data.quote || '';
-      const name = data.name || 'Client Name';
-      const event = data.event || '';
-      const photos = Array.isArray(data.photos) ? data.photos.filter(Boolean) : [];
-
-      card.innerHTML = `
-        <blockquote></blockquote>
-        <figcaption>
-          <span class="t-avatar"></span>
-          <span>
-            <span class="t-name"></span>
-            <span class="t-event"></span>
-          </span>
-        </figcaption>
-      `;
-      // Set all text via textContent (not innerHTML interpolation) so any
-      // characters typed in data.json can't break or inject into markup.
-      card.querySelector('blockquote').textContent = `"${quote}"`;
-      card.querySelector('.t-name').textContent = name;
-      card.querySelector('.t-event').textContent = event;
-
-      const avatar = card.querySelector('.t-avatar');
-      if (!photos.length) {
-        avatar.classList.add('tile-slider-empty');
-        avatar.innerHTML = `<span class="placeholder-label">Add photo</span>`;
-      } else {
-        const imgs = photos.map((f) => {
-          const img = document.createElement('img');
-          img.src = `${folder}/${f}`;
-          img.alt = '';
-          img.draggable = false;
-          return img;
-        });
-        imgs.forEach((img) => avatar.appendChild(img));
-        let current = 0;
-        imgs[current].classList.add('active');
-        if (photos.length > 1) {
-          setInterval(() => {
-            imgs[current].classList.remove('active');
-            current = (current + 1) % photos.length;
-            imgs[current].classList.add('active');
-          }, AUTO_ADVANCE_MS + i * 350);
-        }
-      }
-
-      return card;
-    })
+    clients.map((client, i) => buildTestimonialCard(baseFolder, client, i))
   );
 
-  grid.innerHTML = '';
-  cards.forEach((card) => grid.appendChild(card));
-  applyRevealAnimation(grid.querySelectorAll('.testimonial-card'));
+  function cardsPerPage() {
+    return window.innerWidth <= 760 ? 1 : 3;
+  }
+
+  let perPage = cardsPerPage();
+  let pageCount = Math.ceil(cards.length / perPage);
+  let index = 0;
+  let timer = null;
+
+  function buildPages() {
+    track.innerHTML = '';
+    perPage = cardsPerPage();
+    pageCount = Math.ceil(cards.length / perPage);
+    if (index > pageCount - 1) index = pageCount - 1;
+
+    for (let p = 0; p < pageCount; p++) {
+      const page = document.createElement('div');
+      page.className = 'testimonial-page';
+      cards.slice(p * perPage, p * perPage + perPage).forEach((card) => page.appendChild(card));
+      track.appendChild(page);
+    }
+
+    dotsWrap.innerHTML = pageCount > 1
+      ? Array.from({ length: pageCount }, (_, i) =>
+          `<button class="slider-dot" aria-label="Go to testimonials page ${i + 1}" data-i="${i}"></button>`
+        ).join('')
+      : '';
+
+    const showControls = pageCount > 1;
+    prevBtn.style.display = showControls ? '' : 'none';
+    nextBtn.style.display = showControls ? '' : 'none';
+
+    render();
+    applyRevealAnimation(track.querySelectorAll('.testimonial-card'));
+  }
+
+  function render() {
+    track.style.transform = `translateX(-${index * 100}%)`;
+    Array.from(dotsWrap.querySelectorAll('.slider-dot')).forEach((d, i) =>
+      d.classList.toggle('active', i === index)
+    );
+  }
+
+  function go(i) {
+    if (pageCount < 1) return;
+    index = (i + pageCount) % pageCount;
+    render();
+  }
+  function next() { go(index + 1); }
+  function prev() { go(index - 1); }
+
+  function startAuto() {
+    if (pageCount < 2) return;
+    stopAuto();
+    timer = setInterval(next, AUTO_ADVANCE_MS + 1500);
+  }
+  function stopAuto() {
+    if (timer) clearInterval(timer);
+    timer = null;
+  }
+
+  nextBtn.addEventListener('click', () => { next(); startAuto(); });
+  prevBtn.addEventListener('click', () => { prev(); startAuto(); });
+  dotsWrap.addEventListener('click', (e) => {
+    const dot = e.target.closest('.slider-dot');
+    if (!dot) return;
+    go(Number(dot.dataset.i));
+    startAuto();
+  });
+
+  carousel.addEventListener('mouseenter', stopAuto);
+  carousel.addEventListener('mouseleave', startAuto);
+
+  // Touch swipe support
+  let touchStartX = null;
+  viewport.addEventListener('touchstart', (e) => {
+    touchStartX = e.touches[0].clientX;
+    stopAuto();
+  }, { passive: true });
+  viewport.addEventListener('touchend', (e) => {
+    if (touchStartX === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    if (Math.abs(dx) > 40) {
+      dx < 0 ? next() : prev();
+    }
+    touchStartX = null;
+    startAuto();
+  }, { passive: true });
+
+  let resizeTimer = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      if (cardsPerPage() !== perPage) buildPages();
+    }, 200);
+  });
+
+  buildPages();
+  startAuto();
 }
 
 document.querySelectorAll('[data-slider]').forEach(initFullSlider);
