@@ -63,6 +63,13 @@ if (window.location.search.includes('sent=1') || window.location.hash.includes('
   if (formNote) {
     formNote.textContent = "Thanks! We've received your enquiry and will reach out shortly.";
   }
+  const contactSection = document.getElementById('contact');
+  if (contactSection) {
+    // Scroll after paint so layout has settled (fonts, images, etc.)
+    window.requestAnimationFrame(() => {
+      contactSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }
 }
 
 // ===== Image Sliders =====
